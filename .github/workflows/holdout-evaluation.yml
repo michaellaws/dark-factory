@@ -1,0 +1,52 @@
+name: Holdout evaluation
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  evaluate:
+    name: Run holdout test suite
+    runs-on: ubuntu-latest
+    if: startsWith(github.head_ref, 'task/')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Extract task name from branch
+        id: task
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          TASK="${BRANCH#task/}"
+          echo "name=$TASK" >> "$GITHUB_OUTPUT"
+
+      - name: Set up agent worktree branch for evaluation
+        run: |
+          git config user.email "ci@github-actions"
+          git config user.name "GitHub Actions"
+          git fetch origin ${{ github.head_ref }}
+          git checkout -b task/${{ steps.task.outputs.name }} \
+            origin/${{ github.head_ref }} 2>/dev/null || true
+
+      - name: Run evaluation
+        env:
+          EVAL_THRESHOLD: '90'
+          # TEST_CMD must be set to the absolute path of your test runner script.
+          # Configure this as a repository variable (vars.TEST_CMD) or hardcode here.
+          # Example: TEST_CMD: '/path/to/holdout/${{ steps.task.outputs.name }}/tests/run.sh'
+          # Without TEST_CMD, evaluate.sh falls back to 'npm test' which will likely fail.
+          TEST_CMD: ${{ vars.TEST_CMD }}
+        run: bash scripts/evaluate.sh ${{ steps.task.outputs.name }}
+
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-results-${{ steps.task.outputs.name }}
+          path: .worktrees/results-${{ steps.task.outputs.name }}.json
+          retention-days: 30

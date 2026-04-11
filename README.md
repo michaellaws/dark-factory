@@ -1,0 +1,180 @@
+# dark-factory
+
+> *"A pipeline where no human writes code, no human reviews code, and no human manually tests code. Humans write specs and acceptance criteria. That's it."*
+
+A toolkit for building software with fully autonomous coding agents. Inspired by the [Dark Factory Pattern](https://hackernoon.com/the-dark-factory-pattern-moving-from-ai-assisted-to-fully-autonomous-coding) and [OpenAI's harness engineering](https://openai.com/index/harness-engineering/).
+
+---
+
+## What this is
+
+Most teams plateau at **Level 2** — AI writes code, humans review everything. Getting to **Level 3.5+** requires rethinking the quality architecture, not just the tooling.
+
+This repo is the infrastructure layer that makes autonomous coding trustworthy:
+
+| Level | Description |
+|-------|-------------|
+| 1 | AI assists; humans do everything else |
+| 2 | AI writes functions/files; humans review all changes |
+| 3 | AI generates from specs; holdout scenarios gate quality |
+| **3.5** | **Auto-merge on select services** ← this toolkit targets here |
+| 4 | Full dark factory — specs in, tested merged code out |
+
+---
+
+## The critical insight: train/test separation
+
+A generating agent that can see its own acceptance criteria will optimize for passing them — not for satisfying the intent. The wall between **code generation** and **validation** is what makes autonomous merge trustworthy.
+
+```
+Humans write specs + holdout criteria
+        ↓
+Generating agent works in sparse-checkout worktree
+  (holdout/ does not exist on disk)
+        ↓
+Independent evaluation runs holdout against generated code
+        ↓
+Auto-merge if metrics exceed threshold
+```
+
+The agent never sees `holdout/`. Not by convention — by the filesystem.
+
+---
+
+## What's included
+
+### Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/worktree-new.sh` | Provision a sparse-checkout agent worktree (excludes `holdout/`) |
+| `scripts/worktree-teardown.sh` | Remove worktree + branch |
+| `scripts/evaluate.sh` | Hybrid evaluation runner (traditional tests always, LLM gated) |
+| `scripts/evaluate-llm.sh` | Provider-agnostic LLM evaluation layer |
+| `scripts/evaluate-merge.js` | Aggregate results → structured JSON |
+
+### CI Workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `holdout-integrity.yml` | PR to main from `task/*` | Fails if agent modified `holdout/` |
+| `holdout-evaluation.yml` | PR to main from `task/*` | Gates merge on ≥90% traditional test pass rate |
+| `llm-evaluation.yml` | Nightly + manual | LLM qualitative check, opens issue on failure |
+
+### Directory structure
+
+```
+holdout/          ← acceptance criteria — NEVER visible to generating agents
+  <feature>/
+    scenarios.md  ← LLM evaluation criteria (natural language)
+    tests/        ← traditional executable test suite
+specs/            ← feature specs — fully visible to generating agents
+  <feature>/
+    spec.md       ← intent, requirements, visible acceptance criteria
+scripts/          ← evaluation infrastructure
+tests/scripts/    ← tests for the infrastructure itself
+.github/
+  workflows/      ← CI enforcement
+```
+
+---
+
+## Adopting this toolkit
+
+### As a GitHub template
+
+```bash
+gh repo create myproject --template michaellaws/dark-factory --public
+```
+
+### Manually
+
+Copy `scripts/`, `.github/workflows/`, `holdout/`, `specs/` into your project. Add `.worktrees/` to `.gitignore`.
+
+### Configuration
+
+Set `vars.TEST_CMD` as a GitHub repository variable pointing to your test runner:
+
+```bash
+gh variable set TEST_CMD --body "/absolute/path/to/your/test/runner.sh"
+```
+
+> **Note:** `TEST_CMD` must be an absolute path. The evaluation script runs it from inside the evaluation worktree via `pushd`.
+
+### LLM evaluation (optional)
+
+Set `LLM_API_KEY` as a repository secret. Override model with `LLM_MODEL` env var (default: `claude-haiku-4-5-20251001`). To use a different provider, set `LLM_BASE_URL` to any OpenAI-compatible endpoint.
+
+---
+
+## Workflow
+
+### For every agent task
+
+```bash
+# 1. Provision agent worktree (holdout/ excluded)
+scripts/worktree-new.sh <task-name>
+
+# 2. Agent works in .worktrees/<task-name> — opens PR from task/<task-name>
+
+# 3. CI gates the PR automatically
+#    holdout-integrity.yml  → agent didn't touch holdout/
+#    holdout-evaluation.yml → tests pass at ≥90%
+
+# 4. Merge
+
+# 5. Teardown
+scripts/worktree-teardown.sh <task-name>
+```
+
+### Adding acceptance criteria for a new feature
+
+```bash
+# 1. Write the spec (visible to agents)
+mkdir -p specs/my-feature
+cat > specs/my-feature/spec.md << 'EOF'
+---
+holdout: my-feature
+---
+# My Feature
+## Intent
+...
+EOF
+
+# 2. Write holdout criteria (never visible to agents)
+mkdir -p holdout/my-feature/tests
+cat > holdout/my-feature/scenarios.md << 'EOF'
+---
+feature: my-feature
+threshold: 90
+---
+## Scenario: <name>
+<Natural language description of what must be true.>
+EOF
+```
+
+---
+
+## Principles
+
+This toolkit embodies two axes from `agent-first-engineering`:
+
+**Operate (how agents behave):** Default state is execution. Corrections are cheap; waiting is expensive. Escalate only when genuine human judgment is required.
+
+**Build (how environments are designed):** Repository is the agent's world. Mechanical enforcement over human convention. Validation isolated from generation. Entropy managed continuously.
+
+---
+
+## Status
+
+This is a living toolkit. As the dark factory pattern evolves — spec infrastructure, auto-merge pipelines, mechanical enforcement, observability — new capabilities will land here.
+
+Current: **Step 1 of 7** — Validation isolation complete.
+
+Roadmap:
+- [ ] Spec infrastructure (YAML frontmatter pipeline, spec-to-task orchestrator)
+- [ ] Auto-merge pipeline (metrics-based merge gates)
+- [ ] Mechanical enforcement layer (architecture linters, CI invariants)
+- [ ] Ephemeral per-worktree environments
+- [ ] Agent-accessible observability (LogQL, PromQL, Chrome DevTools)
+- [ ] Recurring maintenance agents (entropy management)

@@ -1,0 +1,29 @@
+name: Holdout integrity
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: Verify holdout/ not modified by agent
+    runs-on: ubuntu-latest
+    if: startsWith(github.head_ref, 'task/')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail if holdout/ was modified
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '^holdout/' || true)
+          if [ -n "$CHANGED" ]; then
+            echo "FAIL: generating agent modified holdout/ — this violates validation isolation"
+            echo ""
+            echo "Modified files:"
+            echo "$CHANGED"
+            echo ""
+            echo "holdout/ must only be modified via human PRs, never by task/* branches."
+            exit 1
+          fi
+          echo "OK: holdout/ integrity verified"

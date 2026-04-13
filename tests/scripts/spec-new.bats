@@ -53,3 +53,8 @@ teardown() {
   run bash scripts/spec-new.sh my-feature
   [ "$status" -ne 0 ]
 }
+
+@test "fails for name with invalid characters (slash)" {
+  run bash scripts/spec-new.sh "foo/bar"
+  [ "$status" -ne 0 ]
+}

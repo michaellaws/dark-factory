@@ -7,6 +7,11 @@ if [ $# -ne 1 ]; then
 fi
 
 NAME="$1"
+
+if [[ ! "$NAME" =~ ^[a-z0-9-]+$ ]]; then
+  echo "Error: feature name must be lowercase alphanumeric with hyphens only (got: $NAME)" >&2
+  exit 1
+fi
 ROOT="$(git rev-parse --show-toplevel)"
 SPEC_DIR="$ROOT/specs/$NAME"
 SPEC_FILE="$SPEC_DIR/spec.md"
@@ -37,7 +42,7 @@ issue: ""
 observable behavior. Does NOT include holdout scenarios.>
 TEMPLATE
 
-sed -i "s/FEATURE_NAME/$NAME/g" "$SPEC_FILE"
+sed -i "s|FEATURE_NAME|$NAME|g" "$SPEC_FILE"
 
 echo "Spec created: $SPEC_FILE"
 echo "Edit it, then set status: ready to trigger dispatch."

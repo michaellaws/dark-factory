@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ $# -lt 1 ]; then
+if [ $# -ne 1 ]; then
   echo "Usage: scripts/spec-new.sh <feature-name>" >&2
   exit 1
 fi

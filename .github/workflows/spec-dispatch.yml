@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths: ['specs/**']
 
+concurrency:
+  group: spec-dispatch
+  cancel-in-progress: false
+
 permissions:
   contents: write
   issues: write

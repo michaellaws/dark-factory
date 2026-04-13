@@ -47,7 +47,7 @@ for (const spec of specs) {
   );
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`gh issue create failed: ${result.stderr}`);
-  const issueUrl = result.stdout.trim();
+  const issueUrl = result.stdout.trim().split('\n').at(-1).trim();
 
   console.log(`Created issue: ${issueUrl}`);
 

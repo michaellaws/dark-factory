@@ -4,7 +4,7 @@
 // Requires: GH_TOKEN env var, gh CLI installed.
 import { findReadySpecs, updateSpecFrontmatter } from './spec-parse.js';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -40,10 +40,14 @@ for (const spec of specs) {
   const tmpFile = join(tmpdir(), `spec-issue-${taskName}.md`);
   writeFileSync(tmpFile, issueBody);
 
-  const issueUrl = execSync(
-    `gh issue create --title "Implement: ${taskName}" --body-file "${tmpFile}"`,
+  const result = spawnSync(
+    'gh',
+    ['issue', 'create', '--title', `Implement: ${taskName}`, '--body-file', tmpFile],
     { encoding: 'utf8' }
-  ).trim();
+  );
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`gh issue create failed: ${result.stderr}`);
+  const issueUrl = result.stdout.trim();
 
   console.log(`Created issue: ${issueUrl}`);
 

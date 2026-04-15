@@ -50,3 +50,7 @@ jobs:
           name: evaluation-results-${{ steps.task.outputs.name }}
           path: .worktrees/results-${{ steps.task.outputs.name }}.json
           retention-days: 30
+        # Downstream workflows (e.g. auto-merge.yml) that consume this artifact
+        # via workflow_run MUST pass run-id: ${{ github.event.workflow_run.id }}
+        # to actions/download-artifact. Without it, download-artifact looks in
+        # the current run (finding nothing) and silently fails.

@@ -101,6 +101,20 @@ gh variable set TEST_CMD --body "/absolute/path/to/your/test/runner.sh"
 
 > **Note:** `TEST_CMD` must be an absolute path. The evaluation script runs it from inside the evaluation worktree via `pushd`.
 
+### Auto-merge (Step 3)
+
+Enable GitHub's native auto-merge so evaluation-passing PRs merge without human intervention:
+
+1. **Repo settings → General → Pull Requests → Allow auto-merge** — must be checked. This is separate from branch protection and is required for `gh pr merge --auto` to work.
+
+2. **Branch protection on `main`** — add required status checks:
+   - `Verify holdout/ not modified by agent` (from `holdout-integrity.yml`)
+   - `Run holdout test suite` (from `holdout-evaluation.yml`)
+
+   Auto-merge only fires when ALL required checks pass. Without branch protection, the merge gate has no teeth.
+
+> **Note:** `auto-merge.yml` always runs the version on `main`, not the PR branch. This is intentional — a task branch cannot modify its own merge gate. Changes to `auto-merge.yml` must land on `main` before they take effect.
+
 ### LLM evaluation (optional)
 
 Set `LLM_API_KEY` as a repository secret. Override model with `LLM_MODEL` env var (default: `claude-haiku-4-5-20251001`). To use a different provider, set `LLM_BASE_URL` to any OpenAI-compatible endpoint.

@@ -34,6 +34,42 @@ When your work is complete, open a PR from your `task/<name>` branch. CI will ru
 
 ---
 
+## Working from a spec
+
+Your task has a spec at `specs/<your-task-name>/spec.md`. The task name is the
+name of the directory your worktree is in (`.worktrees/my-feature` → `my-feature`).
+
+**Protocol — follow this order:**
+
+1. **Read the spec first.** `specs/<task-name>/spec.md` before writing any code.
+   The spec's `issue:` field contains the GitHub Issue URL — you'll need the
+   issue number for your PR description.
+
+2. **Mark in_progress as your first commit.** Update the spec frontmatter:
+   ```
+   status: in_progress
+   ```
+   Commit: `chore: mark <task-name> in_progress`
+
+3. **Implement.** Work inside your worktree. Open a PR with:
+   ```
+   Closes #<issue-number>
+   ```
+   in the PR description. This links the PR to the issue and will close the
+   issue automatically on merge.
+
+4. **Mark complete as your last commit before requesting review.** Update the
+   spec frontmatter:
+   ```
+   status: complete
+   ```
+   Commit: `chore: mark <task-name> complete`
+
+Do not open the PR until step 4 is done. The `complete` commit must be on the
+branch before CI runs evaluation.
+
+---
+
 ## Scripts reference
 
 ```

@@ -59,6 +59,7 @@ The agent never sees `holdout/`. Not by convention — by the filesystem.
 |----------|---------|---------|
 | `holdout-integrity.yml` | PR to main from `task/*` | Fails if agent modified `holdout/` |
 | `holdout-evaluation.yml` | PR to main from `task/*` | Gates merge on ≥90% traditional test pass rate |
+| `auto-merge.yml` | Evaluation passes | Arms `gh pr merge --auto --squash` on task PRs |
 | `llm-evaluation.yml` | Nightly + manual | LLM qualitative check, opens issue on failure |
 
 ### Directory structure
@@ -135,7 +136,11 @@ scripts/worktree-new.sh <task-name>
 #    holdout-integrity.yml  → agent didn't touch holdout/
 #    holdout-evaluation.yml → tests pass at ≥90%
 
-# 4. Merge
+# 4. Auto-merge fires (no human action required)
+#    auto-merge.yml arms GitHub native auto-merge when evaluation passes.
+#    The PR merges once all required branch protection checks clear.
+#    If the PR shows "Auto-merge enabled" but remains open, there is a
+#    merge conflict — rebase the task branch onto main and push to re-trigger.
 
 # 5. Teardown
 scripts/worktree-teardown.sh <task-name>
@@ -183,11 +188,11 @@ This toolkit embodies two axes from `agent-first-engineering`:
 
 This is a living toolkit. As the dark factory pattern evolves — spec infrastructure, auto-merge pipelines, mechanical enforcement, observability — new capabilities will land here.
 
-Current: **Step 1 of 7** — Validation isolation complete.
+Current: **Step 3 of 7** — Auto-merge pipeline complete.
 
 Roadmap:
-- [ ] Spec infrastructure (YAML frontmatter pipeline, spec-to-task orchestrator)
-- [ ] Auto-merge pipeline (metrics-based merge gates)
+- [x] Spec infrastructure (YAML frontmatter pipeline, spec-to-task orchestrator)
+- [x] Auto-merge pipeline (metrics-based merge gates)
 - [ ] Mechanical enforcement layer (architecture linters, CI invariants)
 - [ ] Ephemeral per-worktree environments
 - [ ] Agent-accessible observability (LogQL, PromQL, Chrome DevTools)

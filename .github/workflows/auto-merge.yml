@@ -1,0 +1,102 @@
+# .github/workflows/auto-merge.yml
+#
+# IMPORTANT: This workflow always runs the version on `main`, not the task branch.
+# A task branch cannot modify its own merge gate. Changes to this file must be
+# merged to `main` before they take effect.
+#
+# Triggered by: holdout-evaluation.yml completing (via workflow_run).
+# The conclusion check is done inside the job (not as a top-level `if`) so the
+# job always appears in the Actions tab — easier to debug.
+
+name: Auto-merge on evaluation pass
+
+on:
+  workflow_run:
+    workflows: ["Holdout evaluation"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Arm auto-merge
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check evaluation passed
+        run: |
+          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "Evaluation did not pass (conclusion: $CONCLUSION) — skipping auto-merge."
+            exit 0
+          fi
+
+      - name: Check branch is a task branch
+        run: |
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          if [[ "$BRANCH" != task/* ]]; then
+            echo "Not a task branch ($BRANCH) — skipping."
+            exit 0
+          fi
+
+      - name: Extract task name
+        id: task
+        run: |
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          TASK="${BRANCH#task/}"
+          echo "name=$TASK" >> "$GITHUB_OUTPUT"
+
+      - name: Download evaluation results
+        uses: actions/download-artifact@v4
+        with:
+          # run-id MUST point to the triggering workflow run, not the current run.
+          # Without this, download-artifact searches the current run and silently
+          # finds nothing — causing a cryptic failure downstream.
+          run-id: ${{ github.event.workflow_run.id }}
+          name: evaluation-results-${{ steps.task.outputs.name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify merge_eligible
+        run: |
+          node -e "
+            const fs = require('fs');
+            const r = JSON.parse(fs.readFileSync('results-${{ steps.task.outputs.name }}.json', 'utf8'));
+            if (r.merge_eligible !== true) {
+              console.error('merge_eligible is not true:', JSON.stringify(r.merge_eligible));
+              process.exit(1);
+            }
+            console.log('merge_eligible confirmed true');
+          "
+
+      - name: Find open PR for task branch
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TASK="${{ steps.task.outputs.name }}"
+          PR=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "task/$TASK" \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+          if [ "$PR" = "null" ] || [ -z "$PR" ]; then
+            echo "No open PR found for task/$TASK — already merged or not yet opened. Nothing to do."
+            exit 0
+          fi
+          echo "number=$PR" >> "$GITHUB_OUTPUT"
+
+      - name: Arm auto-merge
+        if: steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge "${{ steps.pr.outputs.number }}" \
+            --repo "${{ github.repository }}" \
+            --auto \
+            --squash
+          echo "Auto-merge armed for PR #${{ steps.pr.outputs.number }}."
+          echo "The PR will merge once all required branch protection checks pass."
+          echo "If a merge conflict exists, the PR will show 'Auto-merge enabled' but remain"
+          echo "open until a human rebases the branch onto main and pushes."

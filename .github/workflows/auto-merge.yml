@@ -102,12 +102,13 @@ jobs:
         if: steps.gate.outputs.proceed == 'true' && steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
-          gh pr merge "${{ steps.pr.outputs.number }}" \
+          gh pr merge "$PR_NUMBER" \
             --repo "${{ github.repository }}" \
             --auto \
             --squash
-          echo "Auto-merge armed for PR #${{ steps.pr.outputs.number }}."
+          echo "Auto-merge armed for PR #$PR_NUMBER."
           echo "The PR will merge once all required branch protection checks pass."
           echo "If a merge conflict exists, the PR will show 'Auto-merge enabled' but remain"
           echo "open until a human rebases the branch onto main and pushes."

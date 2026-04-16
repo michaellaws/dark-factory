@@ -52,6 +52,9 @@ The agent never sees `holdout/`. Not by convention — by the filesystem.
 | `scripts/evaluate.sh` | Hybrid evaluation runner (traditional tests always, LLM gated) |
 | `scripts/evaluate-llm.sh` | Provider-agnostic LLM evaluation layer |
 | `scripts/evaluate-merge.js` | Aggregate results → structured JSON |
+| `scripts/spec-new.sh` | Scaffold a new spec with validated name and correct frontmatter |
+| `scripts/spec-parse.js` | Parse/update spec frontmatter, find specs ready for dispatch |
+| `scripts/spec-dispatch.js` | CI runner — creates GitHub Issues for ready specs, writes back status |
 
 ### CI Workflows
 
@@ -60,6 +63,7 @@ The agent never sees `holdout/`. Not by convention — by the filesystem.
 | `holdout-integrity.yml` | PR to main from `task/*` | Fails if agent modified `holdout/` |
 | `holdout-evaluation.yml` | PR to main from `task/*` | Gates merge on ≥90% traditional test pass rate |
 | `auto-merge.yml` | Evaluation passes | Arms `gh pr merge --auto --squash` on task PRs |
+| `spec-dispatch.yml` | Push to `specs/**` | Creates GitHub Issue when spec status is `ready` |
 | `llm-evaluation.yml` | Nightly + manual | LLM qualitative check, opens issue on failure |
 
 ### Directory structure
@@ -72,7 +76,8 @@ holdout/          ← acceptance criteria — NEVER visible to generating agents
 specs/            ← feature specs — fully visible to generating agents
   <feature>/
     spec.md       ← intent, requirements, visible acceptance criteria
-scripts/          ← evaluation infrastructure
+                     frontmatter: holdout, status, issue
+scripts/          ← evaluation + spec infrastructure
 tests/scripts/    ← tests for the infrastructure itself
 .github/
   workflows/      ← CI enforcement
@@ -97,10 +102,18 @@ Copy `scripts/`, `.github/workflows/`, `holdout/`, `specs/` into your project. A
 Set `vars.TEST_CMD` as a GitHub repository variable pointing to your test runner:
 
 ```bash
-gh variable set TEST_CMD --body "/absolute/path/to/your/test/runner.sh"
+gh variable set TEST_CMD --body "node holdout/<feature>/tests/run.js"
 ```
 
-> **Note:** `TEST_CMD` must be an absolute path. The evaluation script runs it from inside the evaluation worktree via `pushd`.
+`TEST_CMD` runs from inside the evaluation worktree (a full checkout including `holdout/`). Commands in `PATH` work, and paths relative to the repo root work. The runner must output JSON: `{ "passed": N, "failed": N }`.
+
+```bash
+# Example: minimal always-passing runner (holdout/smoke-tests/run.js)
+echo '{"passed":1,"failed":0}'
+
+# Example: wrapping an existing test suite
+node --test 2>&1 | node scripts/format-results.js
+```
 
 ### Auto-merge (Step 3)
 
@@ -127,10 +140,17 @@ Set `LLM_API_KEY` as a repository secret. Override model with `LLM_MODEL` env va
 ### For every agent task
 
 ```bash
-# 1. Provision agent worktree (holdout/ excluded)
-scripts/worktree-new.sh <task-name>
+# 0. Create a spec (visible to agents; status starts as draft)
+scripts/spec-new.sh <task-name>
+# Edit specs/<task-name>/spec.md, set status: ready, push
+# → spec-dispatch.yml creates a GitHub Issue automatically
+
+# 1. Human kicks off agent (intentional gate — guards prompt injection)
+#    Agent reads the Issue, sets status: in_progress, provisions worktree:
+scripts/worktree-new.sh <task-name>   # holdout/ excluded from agent view
 
 # 2. Agent works in .worktrees/<task-name> — opens PR from task/<task-name>
+#    Agent sets status: complete and adds Closes #<issue> to PR body
 
 # 3. CI gates the PR automatically
 #    holdout-integrity.yml  → agent didn't touch holdout/

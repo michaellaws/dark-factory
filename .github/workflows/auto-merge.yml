@@ -1,0 +1,114 @@
+# .github/workflows/auto-merge.yml
+#
+# IMPORTANT: This workflow always runs the version on `main`, not the task branch.
+# A task branch cannot modify its own merge gate. Changes to this file must be
+# merged to `main` before they take effect.
+#
+# Triggered by: holdout-evaluation.yml completing (via workflow_run).
+# The conclusion check is done inside the job (not as a top-level `if`) so the
+# job always appears in the Actions tab — easier to debug.
+#
+# Note: exit 0 inside a `run:` step does NOT halt subsequent steps in a job.
+# Guards are implemented via step outputs + per-step `if:` conditions.
+
+name: Auto-merge on evaluation pass
+
+on:
+  workflow_run:
+    workflows: ["Holdout evaluation"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Arm auto-merge
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check preconditions
+        id: gate
+        run: |
+          CONCLUSION="${{ github.event.workflow_run.conclusion }}"
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "Evaluation did not pass (conclusion: $CONCLUSION) — skipping auto-merge."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$BRANCH" != task/* ]]; then
+            echo "Not a task branch ($BRANCH) — skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Extract task name
+        id: task
+        if: steps.gate.outputs.proceed == 'true'
+        run: |
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          TASK="${BRANCH#task/}"
+          echo "name=$TASK" >> "$GITHUB_OUTPUT"
+
+      - name: Download evaluation results
+        if: steps.gate.outputs.proceed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          # run-id MUST point to the triggering workflow run, not the current run.
+          # Without this, download-artifact searches the current run and silently
+          # finds nothing — causing a cryptic failure downstream.
+          run-id: ${{ github.event.workflow_run.id }}
+          name: evaluation-results-${{ steps.task.outputs.name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify merge_eligible
+        if: steps.gate.outputs.proceed == 'true'
+        env:
+          TASK_NAME: ${{ steps.task.outputs.name }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            const name = process.env.TASK_NAME;
+            const r = JSON.parse(fs.readFileSync('results-' + name + '.json', 'utf8'));
+            if (r.merge_eligible !== true) {
+              console.error('merge_eligible is not true:', JSON.stringify(r.merge_eligible));
+              process.exit(1);
+            }
+            console.log('merge_eligible confirmed true');
+          "
+
+      - name: Find open PR for task branch
+        id: pr
+        if: steps.gate.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TASK_NAME: ${{ steps.task.outputs.name }}
+        run: |
+          PR=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "task/$TASK_NAME" \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+          if [ "$PR" = "null" ] || [ -z "$PR" ]; then
+            echo "No open PR found for task/$TASK_NAME — already merged or not yet opened. Nothing to do."
+            exit 0
+          fi
+          echo "number=$PR" >> "$GITHUB_OUTPUT"
+
+      - name: Arm auto-merge
+        if: steps.gate.outputs.proceed == 'true' && steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          gh pr merge "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --auto \
+            --squash
+          echo "Auto-merge armed for PR #$PR_NUMBER."
+          echo "The PR will merge once all required branch protection checks pass."
+          echo "If a merge conflict exists, the PR will show 'Auto-merge enabled' but remain"
+          echo "open until a human rebases the branch onto main and pushes."

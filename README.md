@@ -59,6 +59,7 @@ The agent never sees `holdout/`. Not by convention — by the filesystem.
 |----------|---------|---------|
 | `holdout-integrity.yml` | PR to main from `task/*` | Fails if agent modified `holdout/` |
 | `holdout-evaluation.yml` | PR to main from `task/*` | Gates merge on ≥90% traditional test pass rate |
+| `auto-merge.yml` | Evaluation passes | Arms `gh pr merge --auto --squash` on task PRs |
 | `llm-evaluation.yml` | Nightly + manual | LLM qualitative check, opens issue on failure |
 
 ### Directory structure
@@ -101,6 +102,20 @@ gh variable set TEST_CMD --body "/absolute/path/to/your/test/runner.sh"
 
 > **Note:** `TEST_CMD` must be an absolute path. The evaluation script runs it from inside the evaluation worktree via `pushd`.
 
+### Auto-merge (Step 3)
+
+Enable GitHub's native auto-merge so evaluation-passing PRs merge without human intervention:
+
+1. **Repo settings → General → Pull Requests → Allow auto-merge** — must be checked. This is separate from branch protection and is required for `gh pr merge --auto` to work.
+
+2. **Branch protection on `main`** — add required status checks:
+   - `Verify holdout/ not modified by agent` (from `holdout-integrity.yml`)
+   - `Run holdout test suite` (from `holdout-evaluation.yml`)
+
+   Auto-merge only fires when ALL required checks pass. Without branch protection, the merge gate has no teeth.
+
+> **Note:** `auto-merge.yml` always runs the version on `main`, not the PR branch. This is intentional — a task branch cannot modify its own merge gate. Changes to `auto-merge.yml` must land on `main` before they take effect.
+
 ### LLM evaluation (optional)
 
 Set `LLM_API_KEY` as a repository secret. Override model with `LLM_MODEL` env var (default: `claude-haiku-4-5-20251001`). To use a different provider, set `LLM_BASE_URL` to any OpenAI-compatible endpoint.
@@ -121,7 +136,11 @@ scripts/worktree-new.sh <task-name>
 #    holdout-integrity.yml  → agent didn't touch holdout/
 #    holdout-evaluation.yml → tests pass at ≥90%
 
-# 4. Merge
+# 4. Auto-merge fires (no human action required)
+#    auto-merge.yml arms GitHub native auto-merge when evaluation passes.
+#    The PR merges once all required branch protection checks clear.
+#    If the PR shows "Auto-merge enabled" but remains open, there is a
+#    merge conflict — rebase the task branch onto main and push to re-trigger.
 
 # 5. Teardown
 scripts/worktree-teardown.sh <task-name>
@@ -169,11 +188,11 @@ This toolkit embodies two axes from `agent-first-engineering`:
 
 This is a living toolkit. As the dark factory pattern evolves — spec infrastructure, auto-merge pipelines, mechanical enforcement, observability — new capabilities will land here.
 
-Current: **Step 1 of 7** — Validation isolation complete.
+Current: **Step 3 of 7** — Auto-merge pipeline complete.
 
 Roadmap:
-- [ ] Spec infrastructure (YAML frontmatter pipeline, spec-to-task orchestrator)
-- [ ] Auto-merge pipeline (metrics-based merge gates)
+- [x] Spec infrastructure (YAML frontmatter pipeline, spec-to-task orchestrator)
+- [x] Auto-merge pipeline (metrics-based merge gates)
 - [ ] Mechanical enforcement layer (architecture linters, CI invariants)
 - [ ] Ephemeral per-worktree environments
 - [ ] Agent-accessible observability (LogQL, PromQL, Chrome DevTools)

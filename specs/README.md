@@ -47,6 +47,14 @@ scripts/spec-new.sh my-feature
 
 This creates `specs/my-feature/spec.md` with the correct frontmatter template.
 
+Before marking a spec ready, run the repo validator from the project root:
+
+```bash
+node scripts/validate-repo.js
+```
+
+This is the executable source of truth for spec/holdout invariants.
+
 ---
 
 ## spec.md template
@@ -90,10 +98,11 @@ git push
 ```
 
 CI will:
-1. Detect the `status: ready` spec with no issue yet
-2. Create a GitHub Issue with the spec contents pre-loaded
-3. Write `status: dispatched` and `issue: <url>` back to the spec
-4. Commit to main with `[skip ci]`
+1. Validate repository invariants for `specs/` and `holdout/`
+2. Detect the `status: ready` spec with no issue yet
+3. Create a GitHub Issue with the spec contents pre-loaded
+4. Write `status: dispatched` and `issue: <url>` back to the spec
+5. Commit to main with `[skip ci]`
 
 You'll receive a GitHub notification for the new issue.
 # Auto-merge smoke test

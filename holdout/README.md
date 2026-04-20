@@ -9,6 +9,8 @@ Structure:
 At least one of `scenarios.md` or `tests/` must be present per feature.
 Both may coexist — traditional tests run on every task, LLM scenarios run when compute is available.
 
+Run `node scripts/validate-repo.js` from the repo root to mechanically verify these conventions.
+
 Agent worktrees are configured with sparse checkout that excludes this directory.
 Files here do not exist on disk in agent working trees.
 
@@ -32,6 +34,7 @@ The `<feature>` value must match the directory name under `holdout/`. Example:
 1. Create `holdout/<feature>/scenarios.md` with natural language scenarios (see format below)
 2. Optionally create `holdout/<feature>/tests/` with an executable test suite
 3. Add `holdout: <feature>` frontmatter to `specs/<feature>/spec.md`
+4. Run `node scripts/validate-repo.js` before pushing
 
 ## Configuring TEST_CMD
 

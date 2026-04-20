@@ -52,6 +52,7 @@ The agent never sees `holdout/`. Not by convention — by the filesystem.
 | `scripts/evaluate.sh` | Hybrid evaluation runner (traditional tests always, LLM gated) |
 | `scripts/evaluate-llm.sh` | Provider-agnostic LLM evaluation layer |
 | `scripts/evaluate-merge.js` | Aggregate results → structured JSON |
+| `scripts/validate-repo.js` | Enforce spec/holdout repository invariants locally and in CI |
 | `scripts/spec-new.sh` | Scaffold a new spec with validated name and correct frontmatter |
 | `scripts/spec-parse.js` | Parse/update spec frontmatter, find specs ready for dispatch |
 | `scripts/spec-dispatch.js` | CI runner — creates GitHub Issues for ready specs, writes back status |
@@ -60,6 +61,7 @@ The agent never sees `holdout/`. Not by convention — by the filesystem.
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
+| `repo-invariants.yml` | PRs + push to main | Validates `specs/` + `holdout/` repository invariants |
 | `holdout-integrity.yml` | PR to main from `task/*` | Fails if agent modified `holdout/` |
 | `holdout-evaluation.yml` | PR to main from `task/*` | Gates merge on ≥90% traditional test pass rate |
 | `auto-merge.yml` | Evaluation passes | Arms `gh pr merge --auto --squash` on task PRs |
@@ -108,12 +110,28 @@ gh variable set TEST_CMD --body "node holdout/<feature>/tests/run.js"
 `TEST_CMD` runs from inside the evaluation worktree (a full checkout including `holdout/`). Commands in `PATH` work, and paths relative to the repo root work. The runner must output JSON: `{ "passed": N, "failed": N }`.
 
 ```bash
-# Example: minimal always-passing runner (holdout/smoke-tests/run.js)
+# Example: minimal always-passing runner (holdout/smoke-tests/tests/run.js)
 echo '{"passed":1,"failed":0}'
 
 # Example: wrapping an existing test suite
 node --test 2>&1 | node scripts/format-results.js
 ```
+
+### Repository validation
+
+Validate spec/holdout invariants locally before pushing:
+
+```bash
+node scripts/validate-repo.js
+```
+
+This enforces the documented cross-reference rules mechanically:
+- every `specs/<feature>/spec.md` has required frontmatter
+- non-`draft` specs point at a real `holdout/<feature>/`
+- every `holdout/<feature>/` has `scenarios.md` or `tests/`
+- every holdout directory is referenced by exactly one spec
+
+CI runs the same validator via `repo-invariants.yml` on PRs and pushes to `main`.
 
 ### Auto-merge (Step 3)
 
@@ -208,12 +226,12 @@ This toolkit embodies two axes from `agent-first-engineering`:
 
 This is a living toolkit. As the dark factory pattern evolves — spec infrastructure, auto-merge pipelines, mechanical enforcement, observability — new capabilities will land here.
 
-Current: **Step 3 of 7** — Auto-merge pipeline complete.
+Current: **Step 4 of 7** — Mechanical enforcement for spec/holdout invariants complete.
 
 Roadmap:
 - [x] Spec infrastructure (YAML frontmatter pipeline, spec-to-task orchestrator)
 - [x] Auto-merge pipeline (metrics-based merge gates)
-- [ ] Mechanical enforcement layer (architecture linters, CI invariants)
+- [x] Mechanical enforcement layer (repo invariants for specs/holdout + CI gating)
 - [ ] Ephemeral per-worktree environments
 - [ ] Agent-accessible observability (LogQL, PromQL, Chrome DevTools)
 - [ ] Recurring maintenance agents (entropy management)

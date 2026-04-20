@@ -3,6 +3,7 @@
 // Run by CI: finds ready specs, creates GitHub Issues, writes back dispatched status.
 // Requires: GH_TOKEN env var, gh CLI installed.
 import { findReadySpecs, updateSpecFrontmatter } from './spec-parse.js';
+import { validateRepo } from './repo-validate.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -11,6 +12,15 @@ import { tmpdir } from 'node:os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const specsDir = join(__dirname, '..', 'specs');
+
+const validation = validateRepo(join(__dirname, '..'));
+if (!validation.valid) {
+  console.error('FAIL: repository invariant violations found before dispatch');
+  for (const error of validation.errors) {
+    console.error(`- ${error}`);
+  }
+  process.exit(1);
+}
 
 const specs = findReadySpecs(specsDir);
 console.log(`Found ${specs.length} ready spec(s)`);
